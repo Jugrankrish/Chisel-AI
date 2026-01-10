@@ -72,8 +72,16 @@ def process_view_whitelist(args):
     view_idx, cam, masked_images_dir, xyz = args
     num_gaussians = len(xyz)
     base_name = Path(cam.image_name).stem
-    masked_path = os.path.join(masked_images_dir, f"{base_name}_bgrem.png")
-    if not os.path.exists(masked_path):
+
+    # Find mask file matching the image base name (any extension)
+    masked_path = None
+    for ext in ['.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG']:
+        candidate = os.path.join(masked_images_dir, f"{base_name}{ext}")
+        if os.path.exists(candidate):
+            masked_path = candidate
+            break
+
+    if masked_path is None:
         return None
     masked_img = cv2.imread(masked_path)
     if masked_img.shape[0] != cam.height or masked_img.shape[1] != cam.width:
@@ -96,8 +104,16 @@ def process_view_color_validate(args):
     if len(whitelisted_indices) == 0:
         return None
     base_name = Path(cam.image_name).stem
-    masked_path = os.path.join(masked_images_dir, f"{base_name}_bgrem.png")
-    if not os.path.exists(masked_path):
+
+    # Find mask file matching the image base name (any extension)
+    masked_path = None
+    for ext in ['.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG']:
+        candidate = os.path.join(masked_images_dir, f"{base_name}{ext}")
+        if os.path.exists(candidate):
+            masked_path = candidate
+            break
+
+    if masked_path is None:
         return None
     masked_img = cv2.imread(masked_path)
     if masked_img.shape[0] != cam.height or masked_img.shape[1] != cam.width:
@@ -183,7 +199,13 @@ def clean_gs(ply_path, cameras_path, masked_images_dir, output_path,
     # Load cameras
     print(f"\nLoading cameras from {cameras_path}...")
     cameras = load_cameras(cameras_path)
-    masked_images = list(Path(masked_images_dir).glob("*_bgrem.png"))
+
+    # Count mask files (any image extension)
+    mask_extensions = ['*.png', '*.jpg', '*.jpeg', '*.PNG', '*.JPG', '*.JPEG']
+    masked_images = []
+    for ext in mask_extensions:
+        masked_images.extend(Path(masked_images_dir).glob(ext))
+
     print(f"  Loaded {len(cameras)} cameras ({len(masked_images)} with masks)")
 
     # STEP 1: WHITELIST (count views if multiview mode)
