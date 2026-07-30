@@ -33,3 +33,8 @@ mask_previews/
 *.zip
 *.mp4
 __pycache__/
+ply/
+node_modules/
+__pycache__/
+mp4/
+*.mp4
