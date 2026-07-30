@@ -1,0 +1,35 @@
+.env
+
+# Ignore heavy model weights & 3D files
+*.ply
+*.pth
+*.bin
+
+# Ignore generated outputs and caches
+text_removal_pipeline/weights/
+text_removal_pipeline/cache/
+text_removal_pipeline/masks/
+text_removal_pipeline/outputs/
+mask_preview/
+mask_previews/
+
+# Large AI weights & 3D point cloud files
+*.ply
+*.pth
+*.bin
+sam_vit_b_01ec64.pth
+
+# Raw datasets & COLMAP data
+data/
+exports/
+
+# Output masks & cached outputs
+text_removal_pipeline/masks/
+text_removal_pipeline/weights/
+text_removal_pipeline/cache/
+text_removal_pipeline/outputs/
+mask_preview/
+mask_previews/
+*.zip
+*.mp4
+__pycache__/

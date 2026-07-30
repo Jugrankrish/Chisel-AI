@@ -1,0 +1,27 @@
+# text_removal_pipeline/requirements.txt
+# Additional dependencies on top of the base clean-gs requirements.
+#
+# Install into the nerfstudio conda environment:
+#   conda run -n nerfstudio pip install -r text_removal_pipeline/requirements.txt
+
+# GroundingDINO — text-guided object detection
+groundingdino-py
+
+# Progress bars
+tqdm>=4.64.0
+
+# ── Optional LLM backends (uncomment the one you want) ──────────────────────
+# google-generativeai     # for --llm gemini
+# openai                  # for --llm openai
+# (ollama uses only stdlib urllib, no extra install needed)
+
+# ── Already present in nerfstudio env (listed for reference) ─────────────────
+# torch>=2.0              (already installed)
+# torchvision             (already installed)
+# segment_anything        (already installed)
+# opencv-python           (already installed)
+# plyfile                 (already installed)
+# numpy                   (already installed)
+# scikit-learn            (already installed)
+# timm                    (already installed)
+# pycolmap                # needed for cameras.json generation
