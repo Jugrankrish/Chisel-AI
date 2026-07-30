@@ -78,7 +78,7 @@ This hackathon project stands on the shoulders of giants. Massive credit to the 
 
 
 Before Pic: 
-<img width="1862" height="988" alt="image" src="https://github.com/user-attachments/assets/d5b4fec1-916f-4f6c-a6c7-86313daf4e82" />
+<img width="1862" height="988" alt="image" src="https://github.com/user-attachments/assets/96f40dc2-9fb6-47b2-9883-59bdc14c4666" />
 
 After Processing Removing Truck:
-![Uploading image.png…]()
+<img width="1862" height="988" alt="image" src="https://github.com/user-attachments/assets/d5b4fec1-916f-4f6c-a6c7-86313daf4e82" />
