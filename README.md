@@ -87,9 +87,11 @@ Acknowledgments
 Before Processing:
 <img width="1866" height="985" alt="image" src="https://github.com/user-attachments/assets/5b0e16c6-3e0c-4210-9611-b81c9d929b17" />
 
-After Processing:
+After Processing for deleting Truck:
 <img width="1866" height="985" alt="image" src="https://github.com/user-attachments/assets/7631c8bb-7777-4333-b873-71465bfb7a21" />
 
+After Processing for deleting Wheels:
+<img width="1600" height="844" alt="image" src="https://github.com/user-attachments/assets/35321e70-bfbb-44ce-a765-c4e92823c89b" />
 
 This project is built on top of Clean-GS, used under the MIT License, and extends it with an automated text-to-edit pipeline covering LLM-based intent parsing, zero-shot detection and segmentation, and multi-view 3D projection. Credit to the original authors for the foundational spatial filtering and projection work this project builds upon.
 
