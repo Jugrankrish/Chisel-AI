@@ -1,4 +1,4 @@
-<img width="1866" height="985" alt="image" src="https://github.com/user-attachments/assets/f8ad2759-1e15-4edc-9be4-f7adbbe91afa" />Chisel-AI
+Chisel-AI
 
 Text-guided object removal for 3D Gaussian Splatting reconstructions.
 
