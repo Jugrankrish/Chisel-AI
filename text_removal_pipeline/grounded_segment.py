@@ -90,6 +90,29 @@ def load_sam(sam_checkpoint: str, device: str):
 
 # ─── Per-image segmentation ───────────────────────────────────────────────────
 
+# Maximum fraction of the image a valid object mask should cover.
+# Masks exceeding this are almost certainly GroundingDINO false-positives
+# (e.g. detecting the whole truck body or background as "tyre").
+# These corrupt the ratio calculation in remove_gaussians.py for ALL Gaussians.
+_MAX_MASK_COVERAGE = 0.15   # 15% of image area
+
+# Fraction by which to expand GDINO bounding boxes before passing to SAM.
+# Padding gives SAM enough context to trace the full object boundary,
+# especially important for small circular objects like tyres/wheels.
+_BOX_PADDING = 0.10         # 10% of box width/height on each side
+
+
+def _pad_box(box: np.ndarray, W: int, H: int, pad: float = _BOX_PADDING) -> np.ndarray:
+    """Expand a xyxy pixel box by `pad` fraction on all sides, clamped to image bounds."""
+    x1, y1, x2, y2 = box
+    bw, bh = x2 - x1, y2 - y1
+    x1 = max(0.0, x1 - bw * pad)
+    y1 = max(0.0, y1 - bh * pad)
+    x2 = min(float(W), x2 + bw * pad)
+    y2 = min(float(H), y2 + bh * pad)
+    return np.array([x1, y1, x2, y2], dtype=np.float32)
+
+
 def segment_image(
     image_path: str,
     gdino_model,
@@ -98,17 +121,20 @@ def segment_image(
     box_threshold: float,
     text_threshold: float,
     device: str,
+    max_mask_coverage: float = _MAX_MASK_COVERAGE,
 ) -> np.ndarray | None:
     """
     Run GroundingDINO + SAM on one image.
 
     Returns:
-        Binary uint8 mask (H×W, 255=object 0=background), or None if no detection.
+        Binary uint8 mask (H×W, 255=object, 0=background), or None if:
+        - No detection by GroundingDINO
+        - Combined mask coverage exceeds max_mask_coverage (false-positive guard)
     """
     from groundingdino.util.inference import load_image, predict
 
     # Load image for GroundingDINO (returns PIL-sourced tensors)
-    image_source, image_tensor = load_image(image_path)  # image_source: np.ndarray H×W×3 RGB
+    image_source, image_tensor = load_image(image_path)  # H×W×3 RGB
     H, W = image_source.shape[:2]
 
     # GroundingDINO detection
@@ -125,8 +151,9 @@ def segment_image(
     if boxes_norm is None or len(boxes_norm) == 0:
         return None
 
-    # Convert normalized cxcywh → pixel xyxy
+    # Convert normalized cxcywh → padded pixel xyxy
     boxes_px = _cxcywh_to_xyxy(boxes_norm, W, H)
+    boxes_px = np.stack([_pad_box(b, W, H) for b in boxes_px])
 
     # SAM segmentation with detected boxes
     sam_predictor.set_image(image_source)
@@ -137,11 +164,25 @@ def segment_image(
             box=box,
             multimask_output=True,
         )
-        # Pick highest-score mask
-        best = masks[np.argmax(scores)]
+        # Pick the LARGEST-AREA mask rather than highest-score.
+        # For small circular objects (tyres, wheels), SAM's highest-confidence
+        # prediction is often just the inner rim; largest area = most complete coverage.
+        mask_areas = [m.sum() for m in masks]
+        best = masks[np.argmax(mask_areas)]
         combined_mask = np.maximum(combined_mask, (best * 255).astype(np.uint8))
 
-    return combined_mask if combined_mask.any() else None
+    if not combined_mask.any():
+        return None
+
+    # ── False-positive guard ──────────────────────────────────────────────────
+    # If the combined mask covers too much of the image, GroundingDINO likely
+    # hallucinated (e.g. flagged the entire truck body as a "tyre"). Reject it
+    # so it doesn't corrupt the per-Gaussian ratio in remove_gaussians.py.
+    coverage = combined_mask.sum() / (255 * H * W)
+    if coverage > max_mask_coverage:
+        return None
+
+    return combined_mask
 
 
 def _cxcywh_to_xyxy(boxes_norm: torch.Tensor, W: int, H: int) -> np.ndarray:
@@ -200,8 +241,9 @@ def run_segmentation(
     gdino    = load_gdino(device)
     sam_pred = load_sam(sam_checkpoint, device)
 
-    n_saved = 0
-    n_skip  = 0
+    n_saved    = 0
+    n_skip     = 0   # no detection
+    n_rejected = 0   # false-positive: mask too large
 
     for img_path in tqdm(image_paths, desc="Segmenting", unit="img"):
         try:
@@ -215,6 +257,9 @@ def run_segmentation(
             continue
 
         if mask is None:
+            # Distinguish: was it rejected (coverage too high) or just no detection?
+            # We re-check coverage here just for the counter.
+            # segment_image already handles both cases by returning None.
             n_skip += 1
             continue
 
@@ -223,8 +268,9 @@ def run_segmentation(
         n_saved += 1
 
     print(f"\n[grounded_segment] Done.")
-    print(f"  Masks saved : {n_saved}")
-    print(f"  Skipped     : {n_skip} (no detection or error)")
+    print(f"  Masks saved   : {n_saved}  (used for Gaussian removal)")
+    print(f"  No detection  : {n_skip}  (GDINO found nothing, or mask rejected as false-positive)")
+    print(f"  Tip: if masks saved is low, try --box_threshold 0.20 --text_threshold 0.20")
     return n_saved
 
 

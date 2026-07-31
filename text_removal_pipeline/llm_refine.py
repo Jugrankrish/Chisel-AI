@@ -27,12 +27,15 @@ if str(_REPO_ROOT) not in sys.path:
 
 # Auto-load .env from repo root
 _ENV_FILE = _REPO_ROOT / ".env"
+_PLACEHOLDER_VALUES = {"PASTE_YOUR_FULL_KEY_HERE", "", "sk-your-real-key-here"}
 if _ENV_FILE.exists():
     for _line in _ENV_FILE.read_text().splitlines():
         _line = _line.strip()
         if _line and not _line.startswith("#") and "=" in _line:
             _k, _, _v = _line.partition("=")
-            os.environ.setdefault(_k.strip(), _v.strip())
+            _k, _v = _k.strip(), _v.strip()
+            if _v and _v not in _PLACEHOLDER_VALUES:
+                os.environ.setdefault(_k, _v)
 
 
 GROUNDING_SYSTEM_PROMPT = """\

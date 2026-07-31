@@ -121,7 +121,9 @@ def remove_gaussians(
     masks_dir:    str,
     output_path:  str,
     num_workers:  int | None = None,
-    ratio:        float = 0.50,
+    ratio:        float = 0.25,   # lowered from 0.50 — 0.50 is too strict for
+                                  # small/occluded objects like tyres/wheels that
+                                  # are only visible from ~half the cameras.
 ) -> dict:
     """
     Remove Gaussians that project onto masked pixels in any camera view.
@@ -192,12 +194,21 @@ def remove_gaussians(
     calculated_ratio = np.zeros(total, dtype=np.float32)
     calculated_ratio[valid_mask] = total_mask_hits[valid_mask] / total_screen_hits[valid_mask]
 
+    # ── Ratio distribution diagnostic ─────────────────────────────────────────────
+    # Shows how many Gaussians fall at each threshold so you can tune --ratio.
+    thresholds = [0.10, 0.20, 0.25, 0.30, 0.40, 0.50, 0.60]
+    print(f"\n  Ratio distribution (of {np.sum(valid_mask):,} Gaussians visible in ≥1 view):")
+    for t in thresholds:
+        n = int(np.sum(calculated_ratio[valid_mask] > t))
+        marker = "  ← current" if abs(t - ratio) < 0.001 else ""
+        print(f"    ratio > {t:.2f}: {n:>8,} Gaussians would be removed{marker}")
+
     blacklist_mask = calculated_ratio > ratio
     keep_mask = ~blacklist_mask
     n_removed = int(np.sum(blacklist_mask))
     n_kept    = int(np.sum(keep_mask))
 
-    print(f"\n  Results:")
+    print(f"\n  Results (ratio > {ratio:.2f}):")
     print(f"    Total     : {total:,}")
     print(f"    Removed   : {n_removed:,}  ({100*n_removed/total:.1f}%)")
     print(f"    Kept      : {n_kept:,}  ({100*n_kept/total:.1f}%)")

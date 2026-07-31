@@ -31,35 +31,49 @@ logger = logging.getLogger(__name__)
 # Auto-load .env from the repo root (if it exists)
 # ---------------------------------------------------------------------------
 _ENV_FILE = Path(__file__).resolve().parent / ".env"
+_PLACEHOLDER_VALUES = {"PASTE_YOUR_FULL_KEY_HERE", "", "sk-your-real-key-here"}
 if _ENV_FILE.exists():
     for _line in _ENV_FILE.read_text().splitlines():
         _line = _line.strip()
         if _line and not _line.startswith("#") and "=" in _line:
             _k, _, _v = _line.partition("=")
-            os.environ.setdefault(_k.strip(), _v.strip())
+            _k, _v = _k.strip(), _v.strip()
+            # Skip placeholder/empty values so they don't shadow real env vars
+            if _v and _v not in _PLACEHOLDER_VALUES:
+                os.environ.setdefault(_k, _v)
 
 # ---------------------------------------------------------------------------
 # System prompt – forces strict JSON-only responses from the model
 # ---------------------------------------------------------------------------
-_SYSTEM_PROMPT = """You are a 3D scene editing assistant.
+_SYSTEM_PROMPT = """You are a 3D scene editing assistant that prepares object names
+for an open-vocabulary object detector (GroundingDINO).
+
 The user will give you a natural-language instruction to modify a 3D scene.
-Your job is ONLY to extract what object should be removed.
+Extract the target object, then REWRITE it as the simplest, most common
+English term a photo captioning dataset would use — not the user's exact wording.
+
+Rules:
+- Prefer short, standard, visually concrete nouns (1-3 words).
+- If the phrase is vague, awkward, or non-standard (e.g. "carrier of truck"),
+  translate it to the real-world part name a detector would recognize
+  (e.g. "truck bed", "cargo box", "flatbed").
+- Never invent objects that don't correspond to a real physical part.
+- Avoid possessives and prepositional phrasing ("of X", "on the Y") in the output.
 
 You MUST respond with ONLY valid JSON – nothing else, no markdown, no explanation.
-The JSON schema is exactly:
+Schema:
 {
   "action": "remove",
-  "target": "<the object name as a short lowercase string>"
+  "target": "<short, standard, detector-friendly object name>"
 }
 
 Examples:
-  User: "Delete the barber chair"    → {"action": "remove", "target": "barber chair"}
-  User: "Get rid of all the trees"   → {"action": "remove", "target": "trees"}
-  User: "Remove the red sofa please" → {"action": "remove", "target": "red sofa"}
-  User: "remove the truck"           → {"action": "remove", "target": "truck"}
-  User: "delete the wheel of the truck" → {"action": "remove", "target": "wheel"}
+  User: "Delete the barber chair"           → {"action": "remove", "target": "chair"}
+  User: "remove the carrier of truck"       → {"action": "remove", "target": "truck bed"}
+  User: "get rid of the thing on the roof"  → {"action": "remove", "target": "roof rack"}
+  User: "erase that pole holding the sign"  → {"action": "remove", "target": "sign post"}
 
-If you cannot identify a valid removal target, respond with:
+If you cannot identify a valid, real object, respond with:
   {"action": "remove", "target": "unknown"}
 """
 
@@ -362,12 +376,12 @@ def parse_user_intent(user_prompt: str) -> dict:
 
     logger.info("Parsing intent for prompt: %r", user_prompt)
 
-    # Try cloud backends first (OpenAI and OpenRouter have highest priority now)
+    # Priority: OpenRouter (working) → OpenAI (needs valid sk- key) → Gemini → Bedrock
     for backend_fn, name in [
-        (_parse_with_openai,  "OpenAI"),
         (_parse_with_openrouter, "OpenRouter"),
-        (_parse_with_gemini,  "Gemini"),
-        (_parse_with_bedrock, "Bedrock"),
+        (_parse_with_openai,     "OpenAI"),
+        (_parse_with_gemini,     "Gemini"),
+        (_parse_with_bedrock,    "Bedrock"),
     ]:
         result = backend_fn(user_prompt)
         if result is not None and result.get("target", "unknown") != "unknown":

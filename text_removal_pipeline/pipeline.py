@@ -23,6 +23,7 @@ Usage:
 """
 
 import argparse
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -85,8 +86,12 @@ def main():
                         help="GroundingDINO text confidence threshold")
 
     # ── 3D Removal thresholds ──
-    parser.add_argument("--ratio",          type=float, default=0.50,
-                        help="Visual hull ratio threshold for 3D removal (default: 0.50)")
+    parser.add_argument("--ratio",          type=float, default=0.25,
+                        help=("Visual hull ratio threshold for 3D removal (default: 0.25). "
+                              "A Gaussian is removed if it lands on a mask pixel in >RATIO fraction "
+                              "of views where it's on-screen. Lower = removes more (use 0.10-0.20 "
+                              "for very small objects). Higher = more conservative (use 0.40-0.50 "
+                              "for large objects like a whole truck)."))
 
     # ── Misc ──
     parser.add_argument("--max_images", type=int, default=None,
@@ -150,6 +155,15 @@ def main():
     if args.skip_segmentation:
         print("  [SKIPPED] Using existing masks in:", args.masks)
     else:
+        # ❗ Clear stale masks from previous runs so only THIS target's masks are used.
+        # Without this, old masks (e.g. from a previous 'truck' run) persist and
+        # cause BOTH the old object AND the new target to be removed from the scene.
+        masks_path = Path(args.masks)
+        if masks_path.exists() and any(masks_path.iterdir()):
+            print(f"  Clearing {len(list(masks_path.glob('*')))} stale mask(s) from previous run...")
+            shutil.rmtree(str(masks_path))
+            masks_path.mkdir(parents=True, exist_ok=True)
+
         from text_removal_pipeline.grounded_segment import run_segmentation
         n_masks = run_segmentation(
             images_dir=args.images,
