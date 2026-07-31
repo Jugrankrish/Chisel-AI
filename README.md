@@ -1,84 +1,105 @@
-🛠️ Chisel-AI: Text-Guided 3D Gaussian Sculpting
+Chisel-AI
 
-Chisel-AI is an automated, text-driven pipeline that lets you isolate, extract, and clean objects from 3D Gaussian Splatting (3DGS) scenes using nothing but natural language.
+Text-guided object removal for 3D Gaussian Splatting reconstructions.
 
-Editing raw point clouds and 3D Gaussians is traditionally tedious, requiring manual lasso tools and hours of cleanup. Chisel-AI solves this by bridging Large Language Models (LLMs), 2D Vision Foundation Models (SAM), and 3D projection algorithms to automatically "chisel" away unwanted parts of your 3D scene.
-The Pipeline
+Chisel-AI lets you edit a 3D Gaussian Splatting scene using a single natural language instruction, such as "remove the truck." The system parses the instruction, locates the target object across every training image using zero-shot detection and segmentation, projects that understanding back into 3D space using the scene's camera geometry, and removes the corresponding Gaussians from the point cloud. The result is a cleaned .ply file that can be loaded directly into any standard Gaussian Splatting viewer, with no manual masking and no retraining required.
 
-Our architecture operates in four distinct phases to map human intent into 3D space:
+Overview
 
-    Input Generation: We start with a 3DGS .ply file. This can be directly downloaded or generated from a raw video using a standard COLMAP + Nerfstudio pipeline.
+3D Gaussian Splatting has become one of the fastest methods for reconstructing real-world scenes from a set of photographs. However, editing a completed reconstruction is difficult: removing a single unwanted object typically requires manually selecting and deleting thousands of individual Gaussians, or using 3D selection tools that risk damaging the surrounding geometry.
 
-    LLM Prompt Optimization: Instead of sending raw user input directly to a vision model, the text prompt is passed through an LLM via OpenRouter. The LLM acts as an intelligent translator, converting simple requests (e.g., "the statue") into highly precise, descriptive instructions optimized for visual segmentation.
+Chisel-AI automates this process end to end. A user provides a text prompt describing what to remove. The pipeline interprets that instruction, identifies the object across all camera viewpoints used in the original reconstruction, and prunes only the Gaussians associated with that object, leaving the rest of the scene untouched.
 
-    2D Segmentation (SAM): The LLM's precise instructions are fed into the Segment Anything Model (SAM). SAM analyzes the 2D training views of the scene and generates pixel-perfect 2D binary masks for the target object.
+How It Works
 
-    3D Sculpting (Clean-GS Integration): The 2D masks and the original .ply file are passed into our integration of the Clean-GS algorithm. This mathematically projects the 2D masks into the 3D space, pruning away every Gaussian splat that falls outside the masked boundaries, outputting a clean, isolated 3D .ply model.
+The pipeline consists of four stages:
 
-What We Built vs. Our Foundations
+1. Intent Parsing A free-text instruction is converted into a structured removal target using a large language model. The system supports a tiered fallback chain across multiple providers (OpenAI, OpenRouter, Gemini, AWS Bedrock) and falls back to a local keyword-based parser if no cloud provider is available, ensuring the pipeline remains functional without any API access.
 
-To make this project possible for the hackathon, we built upon incredible existing open-source research. It is important to distinguish our pipeline from the backend code that powers it:
+2. Zero-Shot Detection and Segmentation The extracted target is passed to GroundingDINO for open-vocabulary object detection across every training image in the dataset. Detected bounding boxes are then refined into pixel-precise masks using Segment Anything (SAM). No manual annotation or per-scene retraining is required.
 
-    The Foundation (Clean-GS): We integrated code from the Clean-GS research paper. Clean-GS provides the brilliant mathematical logic required to take pre-existing 2D masks and use them to filter out floaters and background noise in a 3DGS .ply file based on projection and color validation.
+3. 2D to 3D Projection Using the camera poses recovered by COLMAP during the original reconstruction, each 2D segmentation mask is projected back into 3D space. Consensus across multiple viewpoints is used to determine which Gaussians correspond to the target object, reducing the impact of any single view's detection errors.
 
-    Our Contribution (Chisel-AI): The original Clean-GS requires you to already have 2D masks. Chisel-AI builds an end-to-end automated brain on top of this. We engineered the LLM + SAM bridge that generates those masks dynamically from a simple text prompt. By orchestrating OpenRouter, SAM, and Clean-GS into a single automated pipeline, we turned a mathematical filtering tool into an accessible, zero-shot 3D text-to-sculpting engine.
+4. Pruning The identified Gaussians are removed from the point cloud, and a cleaned .ply file is written to disk, ready for immediate use in downstream rendering or viewing tools.
 
+Results
+
+The pipeline was validated on a reconstructed street scene containing a truck.
+
+Metric Before After
+Gaussian count 2.05 million 1.41 million
+Reduction — 31%
+Target object Present Removed
 Installation
-
-Clone the repository and set up the environment:
-Bash
-
+bash
 git clone https://github.com/Jugrankrish/Chisel-AI.git
 cd Chisel-AI
-
-# Create a virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-
-# Install dependencies
 pip install -r requirements.txt
 
-You will need an OpenRouter API Key to power the LLM instruction layer. Set it as an environment variable:
-Bash
-
-export OPENROUTER_API_KEY="your_api_key_here"
+A CUDA-capable GPU is strongly recommended. Grounding DINO and SAM are both run locally and benefit significantly from GPU acceleration; segmentation across a full multi-view dataset on CPU alone is impractical.
 
 Usage
 
-Run the complete pipeline with a single command. Point it to your dataset (which contains the 2D images and cameras.json), your raw .ply file, and your text prompt.
-Bash
+Run the pipeline with a text prompt describing the object to remove:
 
-python chisel.py \
-  --scene_dir data/my_scene \
-  --input_ply data/my_scene/point_cloud.ply \
-  --prompt "The red vintage car parked on the street" \
-  --output_ply output/chiseled_car.ply
+bash
+python -m text_removal_pipeline.pipeline --text "remove the truck" --llm agent
 
-What happens next?
+Key arguments:
 
-    The LLM translates "The red vintage car..." into a SAM-optimized prompt.
+Argument Description
+--text Natural language instruction describing the removal target
+--llm LLM backend to use for intent parsing (agent enables the full fallback chain)
+--ply Path to the input Gaussian Splatting .ply file
+--cameras Path to the COLMAP-derived cameras.json file
+--masks Directory used to store intermediate segmentation masks
+--output Path for the resulting cleaned .ply file
+--box_threshold Detection confidence threshold passed to GroundingDINO (lower this if the target object is not being detected)
 
-    SAM masks the car in your scene_dir images.
+The pipeline prints progress through each of its four stages and reports the total, removed, and retained Gaussian counts on completion.
 
-    Clean-GS projects those masks and sculpts your .ply.
+Configuration
 
-    Your perfectly isolated 3D object is saved to output/chiseled_car.ply.
+LLM provider credentials are read from a .env file in the project root. At minimum, one of the following should be configured:
 
-Acknowledgements & Credits
+OPENAI_API_KEY= Your key
+OPENROUTER_API_KEY= Your key
+GEMINI_API_KEY= Your key
 
-This hackathon project stands on the shoulders of giants. Massive credit to the following projects and teams:
+AWS Bedrock credentials, if used, follow the standard AWS credential resolution order (environment variables, shared credentials file, or IAM role). If no credentials are configured for any provider, the pipeline automatically falls back to a local keyword-based parser and continues to function without external API access.
 
-    Clean-GS: For the core 3D projection and pruning algorithms. Their research is what makes the final 2D-to-3D lift possible.
+Limitations
 
-    Segment Anything (SAM): Meta's vision foundation model for generating the 2D masks.
+The current implementation removes the target object's Gaussians but does not reconstruct the scene geometry or texture behind the removed object. Because the original photographs never captured what lies behind the object from any angle, the resulting scene contains a visible gap in that region. Addressing this is the primary focus of ongoing work.
 
-    Nerfstudio / COLMAP: For providing the tools to generate the initial 3D Gaussian Splatting scenes.
+Additional current limitations:
 
-    OpenRouter: For the LLM API routing that powers our prompt optimization layer.
+A single removal target is processed per run; multi-object removal in one pass is not yet supported.
+Detection quality depends on GroundingDINO's zero-shot performance for the given text query; ambiguous or highly unusual object descriptions may require threshold tuning.
+No interactive preview of the segmentation mask is currently provided before pruning is committed.
+Roadmap
+Geometric and textural in painting to fill the void left behind removed objects.
+Support for removing multiple distinct objects in a single pipeline run.
+An interactive preview step allowing users to review and adjust masks before committing to a prune.
+Batch processing support to reduce peak GPU memory usage on lower-VRAM hardware.
+Acknowledgments
 
+Before Processing:
+<img width="1866" height="985" alt="image" src="https://github.com/user-attachments/assets/5b0e16c6-3e0c-4210-9611-b81c9d929b17" />
 
-Before Pic: 
-<img width="1862" height="988" alt="image" src="https://github.com/user-attachments/assets/d5b4fec1-916f-4f6c-a6c7-86313daf4e82" />
+After Processing for deleting Truck:
+<img width="1866" height="985" alt="image" src="https://github.com/user-attachments/assets/7631c8bb-7777-4333-b873-71465bfb7a21" />
 
-After Processing Removing Truck:
-![Uploading image.png…]()
+After Processing for deleting Wheels:
+<img width="1600" height="844" alt="image" src="https://github.com/user-attachments/assets/35321e70-bfbb-44ce-a765-c4e92823c89b" />
+
+This project is built on top of Clean-GS, used under the MIT License, and extends it with an automated text-to-edit pipeline covering LLM-based intent parsing, zero-shot detection and segmentation, and multi-view 3D projection. Credit to the original authors for the foundational spatial filtering and projection work this project builds upon.
+
+This project also depends on the following open-source components:
+
+GroundingDINO for open-vocabulary object detection
+Segment Anything (SAM) for image segmentation
+COLMAP for camera pose estimation
+License
+
+This project is released under the MIT License. See the LICENSE file for details.

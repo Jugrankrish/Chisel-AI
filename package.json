@@ -13,7 +13,10 @@
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
+<<<<<<< HEAD
     "@types/three": "^0.185.1",
+=======
+>>>>>>> b227557ce5afba356c3c02ab1e2c0ea08314c80c
     "@vitejs/plugin-react": "^5.0.4",
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
@@ -25,7 +28,10 @@
     "react-dom": "^19.0.1",
     "react-router-dom": "^7.18.2",
     "tailwind-merge": "^3.6.0",
+<<<<<<< HEAD
     "three": "^0.185.1",
+=======
+>>>>>>> b227557ce5afba356c3c02ab1e2c0ea08314c80c
     "vite": "^6.2.3"
   },
   "devDependencies": {
